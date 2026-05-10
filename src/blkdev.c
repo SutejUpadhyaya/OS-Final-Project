@@ -68,8 +68,6 @@ static int blkdev_read(
     struct image *im = dev->private;
     assert(im);
 
-    // TODO:
-
     // check if unavailable
     if (im->fd == -1)
     {
@@ -79,9 +77,9 @@ static int blkdev_read(
     {
         return BLKDEV_E_BADADDR;
     }
-    // check block range
+    // check the  block range
     lseek(im->fd, start * BLKDEV_BLKSZ, SEEK_SET);
-    // read blocks
+    // read  the blocks
     if (read(im->fd, buf, n * BLKDEV_BLKSZ) != n * BLKDEV_BLKSZ)
     {
         return BLKDEV_E_FAULT;
@@ -147,8 +145,7 @@ static int blkdev_flush(struct blkdev *dev, uint32_t start, uint32_t n)
     assert(dev);
     struct image *im = dev->private;
     assert(im);
-
-    // TODO:
+    // check if unavailable
     if (im->fd == -1)
     {
         return BLKDEV_E_UNAVAIL;
@@ -176,16 +173,14 @@ static void blkdev_close(struct blkdev *dev)
     struct image *im = dev->private;
     assert(im);
 
-    // TODO:
-
     // close image file
     close(im->fd);
     im->fd = -1;
     free(im->path);
     im->path = NULL;
     free(im);
+        // free allocated memory
     dev->private = NULL;
-    // free allocated memory
 }
 
 /**
