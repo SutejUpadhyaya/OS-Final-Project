@@ -518,16 +518,16 @@ static inline ssize_t search_block(
     assert(name);
     assert(entries);
 
-    // TODO:
     for (int i = 0; i < FSX492_DIRENTRIES_PER_BLK; i++)
     {
+    // finds the  index of `name` parameter if found in `entries` array and checks it for
+    // validity, otherwise returns -ENOENT if it is not found or -EIO on a disk error
         if (entries[i].valid && strcmp(entries[i].name, name) == 0)
         {
             return i;
         }
     }
     return -ENOENT;
-    // find index of `name` parameter if found in `entries` array
 }
 
 /**
@@ -552,7 +552,7 @@ static int find_entry(
 
     // TODO:
 
-    // check if directory
+    // checking if its a direcotry and valid
     if (dir_ino == 0)
     {
         return -EINVAL;
@@ -561,32 +561,33 @@ static int find_entry(
     {
         return -ENOTDIR;
     }
+
     struct fsx492_dirent buf[FSX492_DIRENTRIES_PER_BLK];
+     // search each and every single allocated direct block for the entry and
+     // then return the entryies inode num.
     for (int i = 0; i < FSX492_N_DIRECT; i++)
     {
+        //skip so it doesnt break later
         if (ctx->inodes[dir_ino].direct_blks[i] == 0)
 {
     continue;
-}
+}       //read into the buffer
         if (read_blks(ctx->inodes[dir_ino].direct_blks[i], 1, buf) < 0)
         {
             return -EIO;
         }
-
+        //calling search to find matching entry name
         ssize_t id = search_block(name, buf);
         if (id >= 0)
         {
             if (ino)
-{
+{//if it is found write to the output 
     *ino = buf[id].ino;
 }
 return 0;
         }
     }
     return -ENOENT;
-    // search directory entries in direct_blks
-
-    // original return -ENOSYS;
 }
 
 /**
@@ -858,7 +859,6 @@ static int _link(
     assert(dir_ino);
     assert(ctx);
 
-    // TODO:
 
     // validate name length
     if (strlen(name) >= FSX492_FILENAMESZ)
@@ -870,10 +870,12 @@ static int _link(
     {
         return -EINVAL;
     }
+    //check directory
     if (!S_ISDIR(ctx->inodes[dir_ino].mode))
     {
         return -ENOTDIR;
     }
+    // check if name already exists in directory
     if (find_entry(name, dir_ino, NULL, ctx) == 0)
     {
         return -EEXIST;
@@ -881,11 +883,12 @@ static int _link(
     int free_blk_idx = -1;
     int free_entry_idx = -1;
     struct fsx492_dirent buf[FSX492_DIRENTRIES_PER_BLK];
-
+    // loop through direct blocks to find a free directory entry
     for (int i = 0; i < FSX492_N_DIRECT; i++)
     {
-        // read block i into buf, return -EIO if fails
+        // read block i into buf,  then return -EIO if fails
         if (ctx->inodes[dir_ino].direct_blks[i] == 0)
+        //allocate
 {
     uint32_t blockn;
 int ret = alloc_blk(&blockn, ctx);
@@ -897,13 +900,15 @@ ctx->inodes[dir_ino].direct_blks[i] = blockn;
 ctx->inodes[dir_ino].blocks++;
 dirty_inode(dir_ino, ctx);
 
-}
+}       //ready block into buffer
         if (read_blks(ctx->inodes[dir_ino].direct_blks[i], 1, buf) < 0)
         {
             return -EIO;
         }
         for (int j = 0; j < FSX492_DIRENTRIES_PER_BLK; j++)
         {
+            // find the  first invalid free entry slot in this block 
+
             if (buf[j].valid == 0)
             {
                 free_blk_idx = i;
@@ -911,40 +916,31 @@ dirty_inode(dir_ino, ctx);
                 break;
             }
         }
-        if (free_blk_idx != -1)
+        if (free_blk_idx != -1)//when found stop searching
         {
             break;
         }
     }
-    if (free_blk_idx == -1)
+    if (free_blk_idx == -1)//all blocks r full
     {
         return -ENOSPC;
     }
-
+        // write the new entry into the free slot present
     buf[free_entry_idx].valid = 1;
 buf[free_entry_idx].ino = ino;
 strncpy(buf[free_entry_idx].name, name, FSX492_FILENAMESZ);
+//write back into disk and return -EIO if fails
 if(write_blks(ctx->inodes[dir_ino].direct_blks[free_blk_idx], 1, buf) < 0)
 {
     return -EIO;
 }
+// update the directory size and mark dirty
 ctx->inodes[dir_ino].size += sizeof(struct fsx492_dirent);
 dirty_inode(dir_ino, ctx);
+//increment
 ctx->inodes[ino].nlink++;
 dirty_inode(ino, ctx);
-    // if free_blk_idx is still -1, no free slot was found
-    // what do you return in that case?
-    // load directory entries from disk
 
-    // find a free directory entry (allocate new blocks as needed)
-
-    // add the info to the entry
-
-    // write back modified entry to disk
-
-    // modify directory inode
-
-    // modify entry inode
 
     return 0;
 }
@@ -973,17 +969,20 @@ static int _unlink(
 int found_blk = -1;
 int found_idx = -1;
 
-// loop through direct blocks
+// search all the direct blocks for the named entry
 for (int i = 0; i < FSX492_N_DIRECT; i++)
 {
+    //skip the ones that are unallaocted
     if (ctx->inodes[dir_ino].direct_blks[i] == 0)
 {
     continue;
 }
+//read block into buf
     if (read_blks(ctx->inodes[dir_ino].direct_blks[i], 1, buf) < 0)
     {
         return -EIO;
     }
+     // search for a valid entry which is  matching the given name
     for (int j = 0; j < FSX492_DIRENTRIES_PER_BLK; j++)
     {
         if (buf[j].valid && strncmp(buf[j].name, name, FSX492_FILENAMESZ) == 0)
@@ -998,24 +997,27 @@ for (int i = 0; i < FSX492_N_DIRECT; i++)
         break;
     }
 }
-
+ // entry is  not found in any block
 if (found_blk == -1)
 {
     return -ENOENT;
 }
+// save the  inode number before making the entry invalid
 uint32_t entry_ino = buf[found_idx].ino;
 buf[found_idx].valid = 0;
+    // make the directory entry invalid
+    //  write block back to disk
 if (write_blks(ctx->inodes[dir_ino].direct_blks[found_blk], 1, buf) < 0)
 {
     return -EIO;
 }
-
+ // update directory size 
 ctx->inodes[dir_ino].size -= sizeof(struct fsx492_dirent);
 dirty_inode(dir_ino, ctx);
-
+//decrement
 ctx->inodes[entry_ino].nlink--;
 dirty_inode(entry_ino, ctx);
-
+//if no links are left, free the inode and its data blocks
 if (ctx->inodes[entry_ino].nlink == 0)
 {
     _truncate(entry_ino, 0, ctx);
@@ -1023,19 +1025,6 @@ if (ctx->inodes[entry_ino].nlink == 0)
 }
 
 return 0;
-
-    // TODO:
-    // load entries from disk and search for the entry
-
-    // invalidate the entry
-
-    // write back modified entries
-
-    // change directory file size after writeback succeeds
-
-    // decrement inode nlink
-
-    // delete inode if necessary
 
 }
 
