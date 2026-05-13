@@ -72,7 +72,7 @@ You should create tests for at least the following conditions:
 - [*] opening a file in "append" mode (see `open` behavior)
 - [*] counting hard links
 - [*] update access/modification time
-- [ ] changing permissions
+- [*] changing permissions
 
 If you implement permissions checking:
 

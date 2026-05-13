@@ -234,11 +234,13 @@ def test_overwriting_files(mountpoint):
         data = file_open.read()
     status = os.stat(file_path)
     if status.st_size != len(same):
-        assert False, "wrong size after same length overwrite: expected " + str(len(same)) + ", got " + str(status.st_size) + "; contents of file: expected " + repr(same) + ", got " + repr(data)
+        assert_text = "wrong size after same length overwrite: expected " + str(len(same)) + ", got " + str(status.st_size) + "; contents of file: expected " + repr(same) + ", got " + repr(data)
+        assert False, assert_text
 
     # check contents are fully replaced (no leftover bytes)
     if data != same:
-        assert False, "wrong content after same length overwrite: expected " + repr(same) + ", got " + repr(data)
+        assert_text = "wrong content after same length overwrite: expected " + repr(same) + ", got " + repr(data)
+        assert False, assert_text
     print("[test] same length overwrite successful")
 
     # overwrite with shorter content
@@ -252,11 +254,13 @@ def test_overwriting_files(mountpoint):
         data = file_open.read()
     status = os.stat(file_path)
     if status.st_size != len(shorter):
-        assert False, "wrong size after shorter overwrite: expected " + str(len(shorter)) + ", got " + str(status.st_size) + "; contents of file: expected " + repr(shorter) + ", got " + repr(data)
+        assert_text = "wrong size after shorter overwrite: expected " + str(len(shorter)) + ", got " + str(status.st_size) + "; contents of file: expected " + repr(shorter) + ", got " + repr(data)
+        assert False, assert_text
 
     # check contents are fully replaced (no leftover bytes)
     if data != shorter:
-        assert False, "wrong content after shorter overwrite: expected " + repr(shorter) + ", got " + repr(data)
+        assert_text = "wrong content after shorter overwrite: expected " + repr(shorter) + ", got " + repr(data)
+        assert False, assert_text
     print("[test] shorter overwrite successful")
 
     # overwrite with longer content
@@ -268,13 +272,15 @@ def test_overwriting_files(mountpoint):
     # check size grew
     status = os.stat(file_path)
     if status.st_size != len(longer):
-        assert False, "wrong size after longer overwrite: expected " + str(len(longer)) + ", got " + str(status.st_size) + "; contents of file: " + repr(data)
+        assert_text = "wrong size after longer overwrite: expected " + str(len(longer)) + ", got " + str(status.st_size) + "; contents of file: " + repr(data)
+        assert False, assert_text
 
     # check contents
     with open(file_path, "r") as file_open:
         data = file_open.read()
     if data != longer:
-        assert False, "wrong content after longer overwrite: expected " + repr(longer) + ", got " + repr(data)
+        assert_text = "wrong content after longer overwrite: expected " + repr(longer) + ", got " + repr(data)
+        assert False, assert_text
     print("[test] longer overwrite successful")
 
     # clean up
@@ -346,6 +352,7 @@ def test_open_file_append_mode(mountpoint):
     print("[test] passed append mode")
 
 def test_link(mountpoint):
+    # counting hard links
     src = os.path.join(mountpoint, "hello.txt")
     link = os.path.join(mountpoint, "link.txt")
     with open(src,'w') as f:
@@ -428,12 +435,58 @@ def test_update_access_mod_time(mountpoint):
         assert False, "failed to delete utimens_test.txt"
 
     print("[test] passed utimens")
+
+
+def test_chmod(mountpoint):
+    # changing permissions
+    file_path = os.path.join(mountpoint,"chmod_test.txt")
+    # 777 = 111111111 (RWX for all)
+
+    # create file
+    with open(file_path,'w') as f:
+        f.write("chmod_test\n")
+    print("[test] created file " + file_path)
+    
+    os.chmod(file_path, 0o700)
+    # 111 000 000
+    # RWX for owner
+    if ((os.stat(file_path).st_mode & 0o777) != 0o700): # bitwise comparison to check for correct permissions
+        assert False, "chmod failed: expected the perms 700, got " + oct(os.stat(file_path).st_mode & 0o777)
+    
+    os.chmod(file_path,0o644)
+    # 110 100 100
+    # R for all, W for owner
+    if ((os.stat(file_path).st_mode & 0o777) != 0o644):
+        assert False, "chmod failed: expected the perms 644, got " + oct(os.stat(file_path).st_mode & 0o777)
+
+    # cleanup
+    os.remove(file_path)
+    if os.path.exists(file_path):
+        assert False, "failed to delete chmod_test.txt"
+    
+    # creates directory
+    dir_path = os.path.join(mountpoint,"chmoddir")
+    os.mkdir(dir_path)
+    
+    os.chmod(dir_path,0o755)
+    # 111 101 101
+    # RX for all, W for owner
+    if((os.stat(dir_path).st_mode & 0o777) != 0o755):
+        assert False, "chmod failed: expected the perms 755, got " + oct(os.stat(dir_path).st_mode & 0o777)
+    
+    # cleanup
+    os.rmdir(dir_path)
+    if os.path.exists(dir_path):
+        assert False, "failed to delete chmoddir"
+    
+    print("[test] passed chmod")
+
 ##############################################################################
 # END TEST DEFINITIONS
 ##############################################################################
 
-TESTS = {
-    k.lstrip('test_'): v for k, v in globals().items() if k.startswith('test_')
+TESTS = { # from Max Green on the 492 discord
+    k.removeprefix('test_'): v for k, v in globals().items() if k.startswith('test_')
 }
 
 
