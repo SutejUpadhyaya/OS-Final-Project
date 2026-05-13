@@ -76,10 +76,10 @@ You should create tests for at least the following conditions:
 
 If you implement permissions checking:
 
-- [ ] expect error when opening a write-only file for reading
-- [ ] expect error when opening a read-only file for writing
-- [ ] expect error when reading from a file opened as write-only
-- [ ] expect error when writing to a file opened as read-only
+- [x] expect error when opening a write-only file for reading
+- [x] expect error when opening a read-only file for writing
+- [x] expect error when reading from a file opened as write-only
+- [x] expect error when writing to a file opened as read-only
 
 If you implement symlinks:
 
