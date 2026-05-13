@@ -121,6 +121,7 @@ int fsx492_truncate(const char * path, off_t len, struct fuse_file_info *fi);
 int fsx492_rename(
     const char * oldpath, const char * newpath, unsigned int flags);
 int fsx492_chmod(const char * path, mode_t mode, struct fuse_file_info * fi);
+int fsx492_access(const char * path, int mask);
 int fsx492_utimens(
     const char * path, const struct timespec tv[2], struct fuse_file_info *fi);
 int fsx492_statfs(const char * path, struct statvfs * st);

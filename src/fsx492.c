@@ -1051,6 +1051,7 @@ struct fuse_operations fsx492_ops = {
     .rename = fsx492_rename,
     .link = fsx492_link,
     .chmod = fsx492_chmod,
+    .access = fsx492_access,
     .utimens = fsx492_utimens,
     .truncate = fsx492_truncate,
     .open = fsx492_open,
@@ -2064,7 +2065,6 @@ int fsx492_opendir(const char *path, struct fuse_file_info *fi)
     dir->ino = ino;
     dir->flags = fi->flags;
     // (optional) perform permissions checking
-    // EC_TODO
     // update fi with file handle
     fi->fh = (uint64_t)dir;
 
@@ -2544,6 +2544,83 @@ int fsx492_chmod(const char *path, mode_t mode, struct fuse_file_info *fi)
 
     return 0;
 }
+
+
+
+/**
+ * @brief      checking permissions for file access
+ *
+ * @param[in]  path  The path
+ * @param      mask (F_OK, R_OK, W_OK, X_OK)
+ *
+ * @return     0        access allowed
+ *             -ENOENT  path doesn't exist
+ *             -ENOTDIR component isn't a directory
+ *             -EINVAL  component is invalid
+ *             -EACCES  access denied
+ *
+ * @note       simplified args to include F_OK in mask with rest of the values
+ *             F_OK -> exists?
+ *             R_OK -> read access?
+ *             W_OK -> write access?
+ *             X_OK -> exec access?
+ *             <unistd.h>
+ *                 #define F_OK 0
+ *                 #define R_OK 4
+ *                 #define W_OK 2
+ *                 #define X_OK 1
+ * 
+ * Based on https://man7.org/linux/man-pages/man2/access.2.html
+ */
+int fsx492_access(const char *path, int mask)
+{
+    // partialy based on chmod (which is based on fsx492_utimens)
+    fprintf(stdout, "fsx492_access: %s, mask =%d\n", path, mask);
+    assert(path);
+
+    int ret = 0;
+    uint32_t ino = 0;
+    // lookup inode
+    // if (fi)
+    // {
+    // ino = ((struct fh *)fi->fh)->ino;
+    // }
+    if ((ret = lookup_path(path, &ino, NULL)) < 0)
+    {
+        return ret;
+    }
+    // path exists, if mask is F_OK, success
+    if (mask == F_OK) {
+        return 0;
+    }
+
+    struct context *ctx = (struct context *)fuse_get_context()->private_data;
+
+    mode_t mode = ctx->inodes[ino].mode;
+
+    if (mask & R_OK) {
+        // check if readible
+        if (!(mode & (S_IRUSR | S_IRGRP | S_IROTH))) {
+            return -EACCES;
+        }
+    }
+
+    if (mask & W_OK) {
+        // check if writable
+        if (!(mode & (S_IWUSR | S_IWGRP | S_IWOTH))) {
+            return -EACCES;
+        }
+    }
+
+    if (mask & X_OK) {
+        // check if executable
+        if (!(mode & (S_IXUSR | S_IXGRP | S_IXOTH))) {
+            return -EACCES;
+        }
+    }
+    return 0;
+}
+
 
 /**
  * @brief      change access and modification times of a file
