@@ -266,6 +266,66 @@ def test_overwriting_files(mountpoint):
 
     print("[test] passed file overwrite")
 
+def test_open_file_append_mode(mountpoint):
+    # opening a file in "append" mode
+
+    file_path = os.path.join(mountpoint, "appendfile.txt")
+
+    # initialize file with some content
+    initial = "abcdef\n"
+    with open(file_path, "w") as file_open:
+        file_open.write(initial)
+    print("[test] wrote initial content (" + str(len(initial)) + " bytes)")
+
+    status = os.stat(file_path)
+    if status.st_size != len(initial):
+        assert False, "wrong initial size: expected " + str(len(initial)) + ", got " + str(status.st_size)
+
+    # append second chunk of data
+    second = "ghijkl\n"
+    with open(file_path, "a") as file_open: # append mode
+        file_open.write(second)
+    print("[test] appended (" + str(len(second)) + " bytes)")
+
+    # check size grew by exactly len(second), existing content preserved
+    status = os.stat(file_path)
+    expected_size = len(initial) + len(second)
+    if status.st_size != expected_size:
+        assert False, "wrong size after append: expected " + str(expected_size) + ", got " + str(status.st_size)
+
+    # append third chunk
+    third = "mnopqr\n"
+    with open(file_path, "a") as file_open:# append mode
+        file_open.write(third)
+    print("[test] appended (" + str(len(third)) + " bytes)")
+
+    status = os.stat(file_path)
+    expected_size = len(initial) + len(second) + len(third)
+    if status.st_size != expected_size:
+        assert False, "wrong size after second append: expected " + str(expected_size) + ", got " + str(status.st_size)
+
+    # check final contents are everything in order
+    with open(file_path, "r") as file_open:
+        data = file_open.read()
+    expected_data = initial + second + third
+    if data != expected_data:
+        assert False, "wrong content after appends: expected " + repr(expected_data) + ", got " + repr(data)
+    print("[test] appends in correct order")
+
+    # opening in "append" mode and closing should leave file unchanged
+    with open(file_path, "a") as file_open: # append mode
+        pass
+    status = os.stat(file_path)
+    if status.st_size != expected_size:
+        assert False, "append-open changed size: expected " + str(expected_size) + ", got " + str(status.st_size)
+    print("[test] append-open did not modify file")
+
+    # clean up
+    os.remove(file_path)
+    if os.path.exists(file_path):
+        assert False, "failed to delete file"
+
+    print("[test] passed append mode")
 
 ##############################################################################
 # END TEST DEFINITIONS
