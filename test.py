@@ -149,7 +149,63 @@ def test_subdir_file_creation_deletion(mountpoint):
 
     print("[test] passed adding and removing files from subdirectories")
 
+def test_creating_multiple_dirs(mountpoint):
+    # adding and removing more than a block's worth of directories (at once)
 
+    # one dir block holds 32 entries, so 50 should span at least 2 blocks
+    entries = 50
+
+    # create base dir to hold all the subdirs
+    base = os.path.join(mountpoint, "manydirs")
+    os.mkdir(base)
+    print("[test] created base directory: " + str(base))
+
+    # create dirs
+    created_dirs = []
+    for i in range(entries):
+        created_dirs += ["directory" + str(i)]
+
+    for dir_name in created_dirs:
+        dir_path = os.path.join(base, dir_name)
+        os.mkdir(dir_path)
+        # print("[test] created directory " + str(dir_path))
+    print("[test] added " + str(entries) + " subdirectories")
+
+    # check if all dirs appear in base
+    listed_dirs = os.listdir(base)
+    check = 0
+    for dir_name in created_dirs:
+        if (dir_name not in listed_dirs):
+            check += 1
+
+    if (check > 0):
+        print("[test] directory creation unsuccessful, missing " + str(check) + " directories")
+        assert_text = "missing " + str(check) + " directories in subdir"
+        assert False, assert_text
+    else:
+        print("[test] directory creation successful")
+
+    # remove all dirs
+    for dir_name in created_dirs:
+        dir_path = os.path.join(base, dir_name)
+        # print("[test] removed directory " + str(dir_path))
+        os.rmdir(dir_path)
+        if os.path.exists(dir_path):
+            assert False, "dir still exists: " + dir_path
+    print("[test] removed all " + str(entries) + " subdirectories")
+
+    # check if base is empty
+    listed_dirs = os.listdir(base)
+    if (len(listed_dirs) > 0):
+        assert False, "base not empty"
+
+
+    # delete base
+    os.rmdir(base)
+    if os.path.exists(base):
+        assert False, "failed to delete base"
+
+    print("[test] passed adding and removing more than a block of directories")
 
 
 ##############################################################################
