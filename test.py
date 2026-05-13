@@ -207,6 +207,65 @@ def test_creating_multiple_dirs(mountpoint):
 
     print("[test] passed adding and removing more than a block of directories")
 
+def test_overwriting_files(mountpoint):
+    # overwriting a file
+
+    file_path = os.path.join(mountpoint, "file1.txt")
+
+    # initialize file with content
+    primary = "abc abc abc abc abc abc abc"
+    with open(file_path, "w") as file_open:
+        file_open.write(primary)
+    print("[test] wrote primary file content (" + str(len(primary)) + " bytes)")
+
+    status = os.stat(file_path)
+    if status.st_size != len(primary):
+        assert_text = "wrong primary file size: expected " + str(len(primary)) + ", got " + str(status.st_size)
+        assert False, assert_text
+
+    # overwrite with shorter content
+    shorter = "def"
+    with open(file_path, "w") as file_open:
+        file_open.write(shorter)
+    print("[test] overwrote file with shorter content (" + str(len(shorter)) + " bytes)")
+
+    # check size shrunk correctly
+    status = os.stat(file_path)
+    if status.st_size != len(shorter):
+        assert False, "wrong size after shorter overwrite: expected " + str(len(shorter)) + ", got " + str(status.st_size)
+
+    # check contents are fully replaced (no leftover bytes)
+    with open(file_path, "r") as file_open:
+        data = file_open.read()
+    if data != shorter:
+        assert False, "wrong content after shorter overwrite: expected " + repr(shorter) + ", got " + repr(data)
+    print("[test] shorter overwrite successful")
+
+    # overwrite with longer content
+    longer = "ghi ghi ghi ghi ghi ghi ghi ghi ghi ghi ghi ghi ghi ghi"
+    with open(file_path, "w") as file_open:
+        file_open.write(longer)
+    print("[test] overwrote with longer content (" + str(len(longer)) + " bytes)")
+
+    # check size grew
+    status = os.stat(file_path)
+    if status.st_size != len(longer):
+        assert False, "wrong size after longer overwrite: expected " + str(len(longer)) + ", got " + str(status.st_size)
+
+    # check contents
+    with open(file_path, "r") as file_open:
+        data = file_open.read()
+    if data != longer:
+        assert False, "wrong content after longer overwrite: expected " + repr(longer) + ", got " + repr(data)
+    print("[test] longer overwrite successful")
+
+    # clean up
+    os.remove(file_path)
+    if os.path.exists(file_path):
+        assert False, "failed to delete file"
+
+    print("[test] passed file overwrite")
+
 
 ##############################################################################
 # END TEST DEFINITIONS
