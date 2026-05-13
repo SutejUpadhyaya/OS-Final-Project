@@ -2523,7 +2523,8 @@ int fsx492_chmod(const char *path, mode_t mode, struct fuse_file_info *fi)
     }
 
     struct context *ctx = (struct context *)fuse_get_context()->private_data;
-
+    
+    struct fsx492_inode *inode = &ctx->inodes[ino];
     // update mode bits (directories and regular files only)
     if (!S_ISDIR(inode->mode) && !S_ISREG(inode->mode))
         // skip if not directory or regular file
@@ -2531,7 +2532,6 @@ int fsx492_chmod(const char *path, mode_t mode, struct fuse_file_info *fi)
         return -EINVAL;
     }
 
-    struct fsx492_inode *inode = &ctx->inodes[ino];
     inode->mode = (inode->mode & S_IFMT) | (mode & ~S_IFMT);
     inode->ctime = time(NULL);
     dirty_inode(ino, ctx);
