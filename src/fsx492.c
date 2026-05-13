@@ -1595,16 +1595,299 @@ int fsx492_write(const char *path, const char *buf, size_t size,
     // TODO:
 
     // validate file handle
+    if (!fi->fh) {
+        return -EBADF;
+    }
+    uint32_t ino = ((struct fh *)fi->fh)->ino;
+    fprintf(stderr, "fsx492_write: writing to inode %u\n", ino);
+
+    if (validate_inode(ino, ctx) < 0) {
+        return -EBADF;
+    }
+
+    struct fsx492_inode *inode = &ctx->inodes[ino];
+
+    if (S_ISDIR(inode->mode)) {
+        return -EISDIR;
+    }
+    if (offset > inode->size) {
+        return -EINVAL;
+    }
+
+    // if (offset + size >= inode->size)
+    // {
+    //     size = inode->size - offset;
+    // }
+
+    char tmpbuf[FSX492_BLKSZ];
+    size_t to_write = size;
+
+    // exit functions, for updating inode attrs, before return
+    int output = 0;
+    int exit = 0;
 
     // write to direct blocks if needed (allocate space as needed)
+    const size_t direct_sz = FSX492_N_DIRECT * FSX492_BLKSZ;
+    if (!exit && (to_write > 0 && offset < direct_sz))
+    {
+        // calculate offset of starting direct block
+        const size_t start_blk = offset / FSX492_BLKSZ;
+        for (size_t i = start_blk; !exit && (to_write > 0 && i < FSX492_N_DIRECT); i++)
+        {
+            // if (read_blks(inode->direct_blks[i], 1, (void *)tmpbuf) < 0)
+            // {
+            //     return -EIO;
+            // }
+
+            if (inode->direct_blks[i] == 0) {
+                // if blocks aren't present, allocate
+                uint32_t new_blk;
+                if ((output = alloc_blk(&new_blk, ctx)) < 0) {
+                    exit = 1;
+                    break;
+                }
+                inode->direct_blks[i] = new_blk;
+                inode->blocks++;
+            }
+
+            // calculate block offset and length to write (also cleaned write indentation from read)
+            size_t blk_offset = (offset % FSX492_BLKSZ);
+            size_t blk_wlen = (to_write > FSX492_BLKSZ - blk_offset) 
+                            ? (FSX492_BLKSZ - blk_offset)
+                            : (to_write);
+
+            // read-modify-write only if partial block
+            if (blk_offset != 0 || blk_wlen != FSX492_BLKSZ) {
+                if (read_blks(inode->direct_blks[i], 1, (void *)tmpbuf) < 0) {
+                    output = -EIO;
+                    exit = 1;
+                    break;
+                }
+            }
+
+            // copy data from source
+            memcpy(tmpbuf + blk_offset, buf, blk_wlen);
+
+            // write modified block to disk
+            if (write_blks(inode->direct_blks[i], 1, (void *)tmpbuf) < 0) {
+                output = -EIO;
+                exit = 1;
+                break;
+            }
+
+            // update state variables
+            to_write -= blk_wlen;
+            offset += blk_wlen;
+            buf += blk_wlen;
+        }
+    }
+
 
     // write to indir1 blocks if needed (allocate space as needed)
 
+    // not repeating every comment since a lot is just the same
+    const size_t indir1_sz = (FSX492_N_DIRECT + FSX492_PTRS_PER_BLK) * FSX492_BLKSZ;
+    if (!exit && (to_write > 0 && offset < indir1_sz))
+    {
+        // allocate indir1 pointer block if it doesn't exist
+        if (inode->indir1_blks == 0) {
+            uint32_t new_blk;
+            if ((output = alloc_blk(&new_blk, ctx)) < 0) {
+                exit = 1;
+            } else {
+                inode->indir1_blks = new_blk;
+            }
+        }
+
+        // load indir1 pts table
+        uint32_t blks[FSX492_PTRS_PER_BLK];
+        if (!exit && read_blks(inode->indir1_blks, 1, (void *)blks) < 0) {
+            output = -EIO;
+            exit = 1;
+        }
+
+        if (!exit) {
+
+            // compute starting data block in indir1 block
+            const size_t start_blk = offset / FSX492_BLKSZ - FSX492_N_DIRECT;
+            for (size_t i = start_blk; !exit && (to_write > 0 && i < FSX492_PTRS_PER_BLK); i++)
+            {
+
+                if (blks[i] == 0) {
+                    // if blocks aren't present, allocate
+                    uint32_t new_blk;
+                    if ((output = alloc_blk(&new_blk, ctx)) < 0) {
+                        write_blks(inode->indir1_blks, 1, (void *)blks);
+                        exit = 1;
+                        break;
+                    }
+                    blks[i] = new_blk;
+                    inode->blocks++;
+                }
+
+                size_t blk_offset = (offset % FSX492_BLKSZ);
+                size_t blk_wlen = (to_write > FSX492_BLKSZ - blk_offset)
+                                        ? (FSX492_BLKSZ - blk_offset)
+                                        : (to_write);
+
+                if (blk_offset != 0 || blk_wlen != FSX492_BLKSZ) {
+                    if (read_blks(blks[i], 1, (void *)tmpbuf) < 0) {
+                        write_blks(inode->indir1_blks, 1, (void *)blks);
+                        output = -EIO;
+                        exit = 1;
+                        break;
+                    }
+                }
+                memcpy(tmpbuf + blk_offset, buf, blk_wlen);
+                if (write_blks(blks[i], 1, (void *)tmpbuf) < 0) {
+                    write_blks(inode->indir1_blks, 1, (void *)blks);
+                    output = -EIO;
+                    exit = 1;
+                    break;
+                }
+
+                to_write -= blk_wlen;
+                offset += blk_wlen;
+                buf += blk_wlen;
+            }
+            if (!exit && write_blks(inode->indir1_blks, 1, (void *)blks) < 0) {
+                output = -EIO;
+                exit = 1;
+            }
+        }
+    }
+
     // write to indir2 blocks if needed (allocate space as needed)
+    const size_t indir2_sz = (FSX492_N_DIRECT + FSX492_PTRS_PER_BLK + FSX492_PTRS_PER_BLK * FSX492_PTRS_PER_BLK) * FSX492_BLKSZ;
+    if (!exit && (to_write > 0 && offset < indir2_sz))
+    {
+        // allocate indir2 pointer block if it doesn't exist
+        if (inode->indir2_blks == 0) {
+            uint32_t new_blk;
+            if ((output = alloc_blk(&new_blk, ctx)) < 0) {
+                exit = 1;
+            } else {
+                inode->indir2_blks = new_blk;
+            }
+        }
 
-    // update inode and mark dirty
+        // load indir2 ptr table
+        uint32_t blks2[FSX492_PTRS_PER_BLK];
+        uint32_t blks1[FSX492_PTRS_PER_BLK];
+        if (!exit && (read_blks(inode->indir2_blks, 1, (void *)blks2) < 0))
+        {
+            output = -EIO;
+            exit = 1;
+        }
 
-    return -ENOSYS;
+        // compute starting indir1 block in indir2 block
+        if (!exit) {
+            const size_t start_i = (offset / FSX492_BLKSZ - FSX492_N_DIRECT - FSX492_PTRS_PER_BLK) / FSX492_PTRS_PER_BLK;
+            for (size_t i = start_i; !exit && (to_write > 0 && i < FSX492_PTRS_PER_BLK); i++)
+            {
+                int blks1_dirty = 0;
+                if (blks2[i] == 0) {
+                    // allocate level-1 indirect block
+                    uint32_t new_blk;
+                    if ((output = alloc_blk(&new_blk, ctx)) < 0) {
+                        write_blks(inode->indir2_blks, 1, (void *)blks2);
+                        exit = 1;
+                        break;
+                    }
+                    blks2[i] = new_blk;
+                    // alloc_blk already zeroes the block on disk
+                    memset(blks1, 0, sizeof(blks1));
+                } else {
+                    // load existing level-1 pointer table
+                    if (read_blks(blks2[i], 1, (void *)blks1) < 0) {
+                        write_blks(inode->indir2_blks, 1, (void *)blks2);
+                        output = -EIO;
+                        exit = 1;
+                        break;
+                    }
+                }
+
+                // compute starting data block in indir1 block
+                const size_t start_j = (offset / FSX492_BLKSZ - FSX492_N_DIRECT
+                                        - FSX492_PTRS_PER_BLK) % FSX492_PTRS_PER_BLK;
+                for (size_t j = start_j; !exit && (to_write > 0 && j < FSX492_PTRS_PER_BLK); j++)
+                {
+                    if (blks1[j] == 0) {
+                        // allocate data block
+                        uint32_t new_blk;
+                        if ((output = alloc_blk(&new_blk, ctx)) < 0) {
+                            write_blks(blks2[i], 1, (void *)blks1);
+                            write_blks(inode->indir2_blks, 1, (void *)blks2);
+                            exit = 1;
+                            break;
+                        }
+                        blks1[j] = new_blk;
+                        blks1_dirty = 1;
+                        inode->blocks++;
+                    }
+
+                    size_t blk_offset = (offset % FSX492_BLKSZ);
+                    size_t blk_wlen = (to_write > FSX492_BLKSZ - blk_offset)
+                                            ? (FSX492_BLKSZ - blk_offset)
+                                            : (to_write);
+
+                    if (blk_offset != 0 || blk_wlen != FSX492_BLKSZ) {
+                        if (read_blks(blks1[j], 1, (void *)tmpbuf) < 0) {
+                            if (blks1_dirty) write_blks(blks2[i], 1, (void *)blks1);
+                            write_blks(inode->indir2_blks, 1, (void *)blks2);
+                            output = -EIO;
+                            exit = 1;
+                            break;
+                        }
+                    }
+                    memcpy(tmpbuf + blk_offset, buf, blk_wlen);
+                    if (write_blks(blks1[j], 1, (void *)tmpbuf) < 0) {
+                        if (blks1_dirty) write_blks(blks2[i], 1, (void *)blks1);
+                        write_blks(inode->indir2_blks, 1, (void *)blks2);
+                        output = -EIO;
+                        exit = 1;
+                        break;
+                    }
+
+                    to_write -= blk_wlen;
+                    offset += blk_wlen;
+                    buf += blk_wlen;
+                }
+
+                // persist level-1 pointer table only if modified
+                if (!exit && blks1_dirty) {
+                    if (write_blks(blks2[i], 1, (void *)blks1) < 0) {
+                        write_blks(inode->indir2_blks, 1, (void *)blks2);
+                        output = -EIO;
+                        exit = 1;
+                    }
+                }
+            }
+
+            // persist the updated indir2 (level-2) pointer table
+            if (!exit && write_blks(inode->indir2_blks, 1, (void *)blks2) < 0) {
+                output = -EIO;
+                exit = 1;
+            }
+        }
+    }
+    size_t written = size - to_write;
+    if (offset > inode->size) {
+        inode->size = offset;
+    }
+    inode->mtime = inode->ctime = time(NULL);
+    dirty_inode(ino, ctx);
+
+    // return bytes written on partial success, error otherwise
+    if (written > 0) {
+        return (int)written;
+    }
+    if (output < 0) {
+        return output;
+    }
+    else {
+        return 0;
+    }
 }
 
 /**
