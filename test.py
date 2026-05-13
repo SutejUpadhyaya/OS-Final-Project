@@ -419,6 +419,30 @@ def test_update_access_mod_time(mountpoint):
         assert False, "failed to delete utimens_test.txt"
 
     print("[test] passed utimens")
+
+def test_chmod(mountpoint):
+    file_path = os.path.join(mountpoint,"chmod_test.txt")
+    with open(file_path,'w') as f:
+        f.write("chmod_test\n")
+    print("[test] created " + file_path)
+    os.chmod(file_path, 0o700)
+    if (os.stat(file_path).st_mode & 0o777 != 0o700):
+        assert False, "chmod failed: expected  the mode 700, got " + oct(os.stat(file_path).st_mode & 0o777)
+    os.chmod(file_path,0o644)
+    if (os.stat(file_path).st_mode & 0o777 != 0o644):
+        assert False, "chmod failed: expected  the mode 644, got " + oct(os.stat(file_path).st_mode & 0o777)
+    os.remove(file_path)
+    if os.path.exists(file_path):
+        assert False, "failed to delete chmod_test.txt"
+    os.mkdir(os.path.join(mountpoint,"chmoddir"))
+    direcetory_path = os.path.join(mountpoint,"chmoddir")
+    os.chmod(direcetory_path,0o755)
+    if(os.stat(direcetory_path).st_mode & 0o777 != 0o755):
+        assert False, "chmod failed: expected the mode 755, got " + oct(os.stat(direcetory_path).st_mode & 0o777)
+    os.rmdir(direcetory_path)
+    if os.path.exists(direcetory_path):
+        assert False, "failed to delete chmoddir"
+    print("[test] passed chmod")
 ##############################################################################
 # END TEST DEFINITIONS
 ##############################################################################
