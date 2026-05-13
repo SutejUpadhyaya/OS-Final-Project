@@ -1372,20 +1372,34 @@ int fsx492_open(const char *path, struct fuse_file_info *fi)
         return -EISDIR;
     }
 
-    // (option: perform permissions checking)
-    // EC_TODO
+    // EC: Access Control - reject open if not allowed to request access
+    int accmode = fi->flags & O_ACCMODE;
+    mode_t mode = ctx->inodes[ino].mode;
 
-    // create the file handle
-    struct fh *file = malloc(sizeof(struct fh));
-    if(!file){
-        return -ENOSPC;
+    if ((accmode == O_RDONLY || accmode == O_RDWR)) {
+        if (!(mode & (S_IRUSR | S_IRGRP | S_IROTH))) {
+            return -EACCES;
+        }
     }
+    if ((accmode == O_WRONLY || accmode == O_RDWR)) {
+        if (!(mode & (S_IWUSR | S_IWGRP | S_IWOTH))) {
+            return -EACCES;
+        }
+    }
+
     if((fi->flags & O_TRUNC)){
         if((ret = _truncate(ino, 0, ctx)) < 0){
             return ret;
         }
         printf("truncate call\n");
     }
+
+    // create the file handle
+    struct fh *file = malloc(sizeof(struct fh));
+    if(!file){
+        return -ENOSPC;
+    }
+    
     file->ino = ino;
     file->flags = fi->flags;
 
@@ -1430,11 +1444,18 @@ int fsx492_read(const char *path, char *buf, size_t size,
     assert(fi);
 
     struct context *ctx = (struct context *)fuse_get_context()->private_data;
-    int ino = ((struct fh *)fi->fh)->ino;
+
+    struct fh *handle = (struct fh *)fi->fh; // EC: save file handle instead of single use
+    int ino = (handle)->ino;
     fprintf(stderr, "fsx492_read: reading inode %u\n", ino);
 
     if (validate_inode(ino, ctx) < 0)
     {
+        return -EBADF;
+    }
+
+    // EC: Access Control - bad file handle if access mode is write only
+    if ((handle->flags & O_ACCMODE) == O_WRONLY) {
         return -EBADF;
     }
 
@@ -1607,10 +1628,17 @@ int fsx492_write(const char *path, const char *buf, size_t size,
     if (!fi->fh) {
         return -EBADF;
     }
-    uint32_t ino = ((struct fh *)fi->fh)->ino;
+
+    struct fh *handle = (struct fh *)fi->fh; // EC: save file handle instead of single use
+    uint32_t ino = (handle)->ino;
     fprintf(stderr, "fsx492_write: writing to inode %u\n", ino);
 
     if (validate_inode(ino, ctx) < 0) {
+        return -EBADF;
+    }
+
+    // EC: Access Control - bad file handle if access mode is read only
+    if ((handle->flags & O_ACCMODE) == O_RDONLY) {
         return -EBADF;
     }
 
