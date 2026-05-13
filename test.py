@@ -223,6 +223,24 @@ def test_overwriting_files(mountpoint):
         assert_text = "wrong primary file size: expected " + str(len(primary)) + ", got " + str(status.st_size)
         assert False, assert_text
 
+    # overwrite with same length content
+    same = "xyz xyz xyz xyz xyz xyz xyz"
+    with open(file_path, "w") as file_open:
+        file_open.write(same)
+    print("[test] overwrote file with same length content (" + str(len(same)) + " bytes)")
+
+    # check size shrunk correctly
+    with open(file_path, "r") as file_open:
+        data = file_open.read()
+    status = os.stat(file_path)
+    if status.st_size != len(same):
+        assert False, "wrong size after same length overwrite: expected " + str(len(same)) + ", got " + str(status.st_size) + "; contents of file: expected " + repr(same) + ", got " + repr(data)
+
+    # check contents are fully replaced (no leftover bytes)
+    if data != same:
+        assert False, "wrong content after same length overwrite: expected " + repr(same) + ", got " + repr(data)
+    print("[test] same length overwrite successful")
+
     # overwrite with shorter content
     shorter = "def"
     with open(file_path, "w") as file_open:
@@ -230,13 +248,13 @@ def test_overwriting_files(mountpoint):
     print("[test] overwrote file with shorter content (" + str(len(shorter)) + " bytes)")
 
     # check size shrunk correctly
-    status = os.stat(file_path)
-    if status.st_size != len(shorter):
-        assert False, "wrong size after shorter overwrite: expected " + str(len(shorter)) + ", got " + str(status.st_size)
-
-    # check contents are fully replaced (no leftover bytes)
     with open(file_path, "r") as file_open:
         data = file_open.read()
+    status = os.stat(file_path)
+    if status.st_size != len(shorter):
+        assert False, "wrong size after shorter overwrite: expected " + str(len(shorter)) + ", got " + str(status.st_size) + "; contents of file: expected " + repr(shorter) + ", got " + repr(data)
+
+    # check contents are fully replaced (no leftover bytes)
     if data != shorter:
         assert False, "wrong content after shorter overwrite: expected " + repr(shorter) + ", got " + repr(data)
     print("[test] shorter overwrite successful")
@@ -250,7 +268,7 @@ def test_overwriting_files(mountpoint):
     # check size grew
     status = os.stat(file_path)
     if status.st_size != len(longer):
-        assert False, "wrong size after longer overwrite: expected " + str(len(longer)) + ", got " + str(status.st_size)
+        assert False, "wrong size after longer overwrite: expected " + str(len(longer)) + ", got " + str(status.st_size) + "; contents of file: " + repr(data)
 
     # check contents
     with open(file_path, "r") as file_open:
@@ -332,14 +350,75 @@ def test_link(mountpoint):
     link = os.path.join(mountpoint, "link.txt")
     with open(src,'w') as f:
          f.write("link test content")
-    assert os.stat(src).st_nlink  == 1
+    if os.stat(src).st_nlink != 1:
+        assert False, "expected nlink=1 before link, got " + str(os.stat(src).st_nlink)
     os.link(src,link)
-    assert os.stat(src).st_nlink == 2
-    assert os.stat(link).st_nlink == 2
+
+    time.sleep(1.5)  # wait for FUSE attr cache to expire
+    if os.stat(src).st_nlink != 2:
+        assert False, "expected src nlink=2 after link, got " + str(os.stat(src).st_nlink)
+    if os.stat(link).st_nlink != 2:
+        assert False, "expected link nlink=2 after link, got " + str(os.stat(link).st_nlink)
     os.unlink(link)
-    assert os.stat(src).st_nlink == 1
+
+    time.sleep(1.5)  # wait for FUSE attr cache to expire
+    if os.stat(src).st_nlink != 1:
+        assert False, "expected nlink=1 after unlink, got " + str(os.stat(src).st_nlink)
     os.remove(src)
-    print("[test] passed  hard link and unlink count")
+    print("[test] passed hard link and unlink count")
+
+def test_update_access_mod_time(mountpoint):
+    file_path = os.path.join(mountpoint, "utimens_test.txt")
+
+    # create file with known content
+    with open(file_path, "w") as f:
+        f.write("utimens test\n")
+    print("[test] created " + file_path)
+
+    # set explicit atime/mtime far in the past
+    past_atime = 1000000000.0
+    past_mtime = 1000000001.0
+    os.utime(file_path, (past_atime, past_mtime))
+    print("[test] set atime=" + str(past_atime) + ", mtime=" + str(past_mtime))
+
+    st = os.stat(file_path)
+    if abs(st.st_atime - past_atime) >= 2:
+        assert False, "atime not set: expected ~" + str(past_atime) + ", got " + str(st.st_atime)
+    if abs(st.st_mtime - past_mtime) >= 2:
+        assert False, "mtime not set: expected ~" + str(past_mtime) + ", got " + str(st.st_mtime)
+    print("[test] atime/mtime correctly stored after explicit utime")
+
+    # write should update mtime (and not leave mtime at the past value)
+    time.sleep(0.1)
+    before_write = time.time()
+    with open(file_path, "w") as f:
+        f.write("updated content\n")
+    after_write = time.time()
+
+    st = os.stat(file_path)
+    if st.st_mtime < before_write - 1:
+        assert False, "mtime not updated after write: got " + str(st.st_mtime) + ", expected >= " + str(before_write)
+    if st.st_mtime > after_write + 2:
+        assert False, "mtime too far in future after write: got " + str(st.st_mtime)
+    print("[test] mtime updated correctly after write")
+
+    # set a new explicit pair and verify both change independently
+    new_atime = 1111111111.0  # 2005-03-18
+    new_mtime = 1222222222.0  # 2008-09-23
+    os.utime(file_path, (new_atime, new_mtime))
+    st = os.stat(file_path)
+    if abs(st.st_atime - new_atime) >= 2:
+        assert False, "atime wrong after second utime: expected ~" + str(new_atime) + ", got " + str(st.st_atime)
+    if abs(st.st_mtime - new_mtime) >= 2:
+        assert False, "mtime wrong after second utime: expected ~" + str(new_mtime) + ", got " + str(st.st_mtime)
+    print("[test] second explicit utime preserved both timestamps independently")
+
+    # clean up
+    os.remove(file_path)
+    if os.path.exists(file_path):
+        assert False, "failed to delete utimens_test.txt"
+
+    print("[test] passed utimens")
 ##############################################################################
 # END TEST DEFINITIONS
 ##############################################################################

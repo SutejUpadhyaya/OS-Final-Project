@@ -1379,6 +1379,12 @@ int fsx492_open(const char *path, struct fuse_file_info *fi)
     if(!file){
         return -ENOSPC;
     }
+    if((fi->flags & O_TRUNC)){
+        if((ret = _truncate(ino, 0, ctx)) < 0){
+            return ret;
+        }
+        printf("truncate call\n");
+    }
     file->ino = ino;
     file->flags = fi->flags;
 
