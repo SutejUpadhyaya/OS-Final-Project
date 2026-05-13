@@ -7,6 +7,8 @@ import tempfile
 import shutil
 import signal
 import sys
+import stat
+import errno
 
 # -------- CONFIG --------
 FUSE_BINARY = "fsx492"          # your compiled FS
@@ -480,6 +482,115 @@ def test_chmod(mountpoint):
         assert False, "failed to delete chmoddir"
     
     print("[test] passed chmod")
+
+
+#  expect error when opening a write-only file for reading
+def test_access_open_w_only_for_r(mountpoint):
+    file_path = os.path.join(mountpoint,"write_only.txt")
+    with open(file_path, 'w') as f:
+        f.write("some content")
+    os.chmod(file_path, stat.S_IWUSR)
+    err = False
+    try:
+        #try except to catch the error
+        # attempts opens a write-only file
+        with open(file_path,'r') as f:
+            f.read()# will never reach as it will err on open
+    except PermissionError: 
+       # permission error  as they have the wrong permissions to use the file
+       # cited source https://docs.python.org/3/library/exceptions.html
+       err = True
+    assert err, "expected error when opening write-only file for reading"
+    os.chmod(file_path, 0o644)
+    os.remove(file_path)
+    #removes file and checks if it is delted
+    if(os.path.exists(file_path)):
+        assert False, "failed to delete write_only.txt"
+
+    print("[test] passed, not allowed to open a write-only file for reading")
+
+#  expect error when opening a read-only file for writing
+def test_access_open_r_only_for_w(mountpoint):
+    file_path = os.path.join(mountpoint,"read_only.txt")
+    with open(file_path, 'w') as f:
+        f.write("some content")
+    os.chmod(file_path, stat.S_IRUSR)
+    err = False
+    try:
+        #try except to catch the error
+        # ttempts opens a read-only file
+        with open(file_path,"w") as f:
+            f.write("should not be able to write")
+            #will never reach this write as it  errs on open
+    except PermissionError:
+        # permission error  as they have the wrong permissions to use the file
+        err = True
+    assert err, "expected error when opening read-only file for writing"
+    os.chmod(file_path, 0o644)
+    os.remove(file_path)
+    #removes file and checks if it is delted
+    if(os.path.exists(file_path)):
+        assert False, "failed to delete write_only.txt"
+    
+    print("[test] passed, not allowed to open a read-only file for writing")
+
+#  expect error when reading from a file opened as write-only
+def test_access_r_from_w_only(mountpoint):
+    file_path = os.path.join(mountpoint,"write_only.txt")
+    with open(file_path, 'w') as f:
+        f.write("some content")
+    
+    fd = os.open(file_path, os.O_WRONLY)
+
+    err = False
+    try:
+        #try except to catch the error
+        # open and read a write-only file
+        os.read(fd, 100) # errs on this read so goes to except
+    except OSError as e:
+        if e.errno == errno.EBADF: # bad file handle error
+            err = True
+    finally:
+        # close fd always
+        os.close(fd)
+
+    assert err, "expected error when reading from a file opened as write-only"
+
+    #removes file and checks if it is delted
+    os.remove(file_path)
+    if(os.path.exists(file_path)):
+        assert False, "failed to delete write_only.txt"
+    
+    print("[test] passed, not allowed to read a write-only file")
+
+#  expect error when writing to a file opened as read-only
+def test_access_w_from_r_only(mountpoint):
+    file_path = os.path.join(mountpoint,"read_only.txt")
+    with open(file_path, 'w') as f:
+        f.write("some content")
+
+    fd = os.open(file_path, os.O_RDONLY)
+
+    err = False
+    try:   
+        #try except to catch the error
+        # opens a read-only file
+        os.write(fd, b"this should fail") # errs on this write so goes to except
+    except OSError as e:
+        if e.errno == errno.EBADF: # bad file handle error
+            err = True
+    finally:
+        # close fd always
+        os.close(fd)
+
+    assert err, "expected error when writing from a file opened as read-only"
+
+    #removes file and checks if it is delted
+    os.remove(file_path)
+    if(os.path.exists(file_path)):
+        assert False, " failed to delete read_only.txt"
+
+    print("[test] passed, not allowed to write to a read-only file")
 
 ##############################################################################
 # END TEST DEFINITIONS
