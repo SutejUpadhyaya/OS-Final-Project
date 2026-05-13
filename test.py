@@ -95,6 +95,61 @@ def test_large_file(mountpoint):
 
     print("[test] passed large file")
 
+def test_subdir_file_creation_deletion(mountpoint):
+    # adding and removing files from subdirectories
+
+    # create subdir
+    subdir = os.path.join(mountpoint, "subdir") # `.../subdir`
+    os.mkdir(subdir)
+    print("[test] created subdirectory: " + str(subdir))
+
+    # add multiple files to subdir
+    created_files = ['agore1.txt', 'supadhya.md', 'jchoi14.c']
+    for file_name in created_files:
+        file_path = os.path.join(subdir, file_name)
+        with open(file_path, "w") as file_open:
+            file_content = "this is a file named: " + file_name
+            file_open.write(file_content)
+        print("[test] added file " + str(file_path))
+
+    # check if all files appear in subdir
+    listed_files = os.listdir(subdir)
+    check = 0
+    for file_name in created_files:
+        if (file_name not in listed_files):
+            check += 1
+    
+    if (check > 0):
+        print("[test] file adding unsuccessful, missing " + str(check) + " files")
+        assert_text = "missing " + str(check) + " files in subdir"
+        assert False, assert_text
+    else:
+        print("[test] file adding successful")
+
+
+    # remove files from subdir
+    for file_name in created_files:
+        file_path = os.path.join(subdir, file_name)
+        os.remove(file_path)
+        print("[test] removed file " + str(file_path))
+        if os.path.exists(file_path):
+            assert_text = "file still exists: " + file_path
+            assert False, assert_text
+    
+    # check if subdir is empty
+    listed_files = os.listdir(subdir)
+    if (len(listed_files) > 0):
+        assert False, "subdir not empty"
+
+
+    # delete subdir
+    os.rmdir(subdir)
+    if os.path.exists(subdir):
+        assert False, "failed to delete subdir"
+
+    print("[test] passed adding and removing files from subdirectories")
+
+
 
 
 ##############################################################################
