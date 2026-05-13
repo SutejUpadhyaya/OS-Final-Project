@@ -2209,11 +2209,60 @@ int fsx492_link(const char *oldpath, const char *newpath)
     assert(oldpath);
     assert(newpath);
 
+
+    // uses sme logic from fsx492_mknod
     // lookup paths
+    struct context *ctx = (struct context *)fuse_get_context()->private_data;
+    
+    // lookup oldpath
+    int ret = 0;
+    uint32_t old_ino = 0;
+    if ((ret = lookup_path(oldpath, &old_ino, NULL)) < 0) {
+        return ret;
+    }
+    assert(old_ino);
+
+    // return if is directory (can't hardlink)
+    if (S_ISDIR(ctx->inodes[old_ino].mode)) {
+        return -EPERM;
+    }
+
+    // if oldpath has too many links
+    if (ctx->inodes[old_ino].nlink >= 65000) {
+        return -EMLINK;
+    }
+
+    // lookup newpath
+    uint32_t new_target_ino = 0, new_parent_ino = 0;
+    switch (ret = lookup_path(newpath, &new_target_ino, &new_parent_ino))
+    {
+    case 0: // the path was found
+        return -EEXIST;
+    case -EIO:     // disk error
+    case -ENOTDIR: // bad path
+    case -EINVAL:  // bad path
+        return ret;
+    case -ENOENT:
+        if (!new_target_ino)
+        {
+            // bad path
+            return ret;
+        }
+        break;
+    default:
+        assert(0); // unreachable
+    }
+
+    assert(new_parent_ino);
 
     // link old inode to new directory inode
 
-    return -ENOSYS;
+    if ((ret = _link(basename(newpath), old_ino, new_parent_ino, ctx)) < 0)
+    {
+        fprintf(stderr, "fsx492_link: failed to link inode\n");
+        // free_inode(old_ino, ctx);
+    }
+    return ret;
 }
 
 /**
