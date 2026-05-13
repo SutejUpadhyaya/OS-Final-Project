@@ -368,49 +368,58 @@ def test_link(mountpoint):
     print("[test] passed hard link and unlink count")
 
 def test_update_access_mod_time(mountpoint):
+    # update access/modification time
+
     file_path = os.path.join(mountpoint, "utimens_test.txt")
 
-    # create file with known content
-    with open(file_path, "w") as f:
-        f.write("utimens test\n")
-    print("[test] created " + file_path)
+    # create initial file
+    with open(file_path, "w") as file_open:
+        file_open.write("initial content\n")
+    print("[test] created file " + file_path)
+
+    time.sleep(2)
 
     # set explicit atime/mtime far in the past
     past_atime = 1000000000.0
     past_mtime = 1000000001.0
     os.utime(file_path, (past_atime, past_mtime))
-    print("[test] set atime=" + str(past_atime) + ", mtime=" + str(past_mtime))
+    print("[test] initial atime==" + str(past_atime) + ", mtime=" + str(past_mtime))
 
-    st = os.stat(file_path)
-    if abs(st.st_atime - past_atime) >= 2:
-        assert False, "atime not set: expected ~" + str(past_atime) + ", got " + str(st.st_atime)
-    if abs(st.st_mtime - past_mtime) >= 2:
-        assert False, "mtime not set: expected ~" + str(past_mtime) + ", got " + str(st.st_mtime)
+    status1 = os.stat(file_path)
+    if abs(status1.st_atime - past_atime) >= 2:
+        assert False, "atime not set: expected ~" + str(past_atime) + ", got " + str(status1.st_atime)
+    if abs(status1.st_mtime - past_mtime) >= 2:
+        assert False, "mtime not set: expected ~" + str(past_mtime) + ", got " + str(status1.st_mtime)
     print("[test] atime/mtime correctly stored after explicit utime")
 
     # write should update mtime (and not leave mtime at the past value)
     time.sleep(0.1)
     before_write = time.time()
-    with open(file_path, "w") as f:
-        f.write("updated content\n")
+
+    # modifying file, should update mtime
+    with open(file_path, "w") as file_open:
+        file_open.write("modified content\n")
     after_write = time.time()
 
-    st = os.stat(file_path)
-    if st.st_mtime < before_write - 1:
-        assert False, "mtime not updated after write: got " + str(st.st_mtime) + ", expected >= " + str(before_write)
-    if st.st_mtime > after_write + 2:
-        assert False, "mtime too far in future after write: got " + str(st.st_mtime)
-    print("[test] mtime updated correctly after write")
+    status2 = os.stat(file_path)
+    print("[test] after write mtime=" + str(status2.st_mtime))
+
+    if status2.st_mtime < before_write - 1:
+        assert False, "mtime not advanced after write: got " + str(status2.st_mtime) + ", expected >= " + str(before_write)
+    if status2.st_mtime > after_write + 2:
+        assert False, "mtime too far in future after write: got " + str(status2.st_mtime)
+    print("[test] mtime advanced correctly after write")
+
 
     # set a new explicit pair and verify both change independently
     new_atime = 1111111111.0  # 2005-03-18
     new_mtime = 1222222222.0  # 2008-09-23
     os.utime(file_path, (new_atime, new_mtime))
-    st = os.stat(file_path)
-    if abs(st.st_atime - new_atime) >= 2:
-        assert False, "atime wrong after second utime: expected ~" + str(new_atime) + ", got " + str(st.st_atime)
-    if abs(st.st_mtime - new_mtime) >= 2:
-        assert False, "mtime wrong after second utime: expected ~" + str(new_mtime) + ", got " + str(st.st_mtime)
+    status3 = os.stat(file_path)
+    if abs(status3.st_atime - new_atime) >= 2:
+        assert False, "atime wrong after second utime: expected ~" + str(new_atime) + ", got " + str(status3.st_atime)
+    if abs(status3.st_mtime - new_mtime) >= 2:
+        assert False, "mtime wrong after second utime: expected ~" + str(new_mtime) + ", got " + str(status3.st_mtime)
     print("[test] second explicit utime preserved both timestamps independently")
 
     # clean up

@@ -70,8 +70,8 @@ You should create tests for at least the following conditions:
 - [*] adding and removing more than a block's worth of directories (at once)
 - [*] overwriting a file (see `open` behavior)
 - [*] opening a file in "append" mode (see `open` behavior)
-- [ ] counting hard links
-- [ ] update access/modification time
+- [*] counting hard links
+- [*] update access/modification time
 - [ ] changing permissions
 
 If you implement permissions checking:
