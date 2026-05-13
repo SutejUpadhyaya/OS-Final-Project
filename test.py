@@ -327,6 +327,19 @@ def test_open_file_append_mode(mountpoint):
 
     print("[test] passed append mode")
 
+def test_link(mountpoint):
+    src = os.path.join(mountpoint, "hello.txt")
+    link = os.path.join(mountpoint, "link.txt")
+    with open(src,'w') as f:
+         f.write("link test content")
+    assert os.stat(src).st_nlink  == 1
+    os.link(src,link)
+    assert os.stat(src).st_nlink == 2
+    assert os.stat(link).st_nlink == 2
+    os.unlink(link)
+    assert os.stat(src).st_nlink == 1
+    os.remove(src)
+    print("[test] passed  hard link and unlink count")
 ##############################################################################
 # END TEST DEFINITIONS
 ##############################################################################
