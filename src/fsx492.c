@@ -1594,7 +1594,7 @@ int fsx492_write(const char *path, const char *buf, size_t size,
 
     // TODO:
 
-    // uses sme logic from fsx492_write
+    // uses same logic from fsx492_write
 
     // validate file handle
     if (!fi->fh) {
