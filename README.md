@@ -1,9 +1,9 @@
 # FSX492
 
 Group Members
-- member1 (email1)
-- member2 (email2)
-- member3 (email3)
+- Sutej Upadhyaya (supadhya@stevens.edu)
+- Jacob Choi (jchoi14@stevens.edu)
+- Arjun Gore (agore1@stevens.edu)
 
 Additional features implemented:
 
@@ -17,10 +17,10 @@ Additional features implemented:
 These functions simulate disk operations.
 They are critical for anything to work correctly.
 
-- [ ] `blkdev_read`
-- [ ] `blkdev_write`
-- [ ] `blkdev_flush`
-- [ ] `blkdev_close`
+- [*] `blkdev_read`
+- [*] `blkdev_write`
+- [*] `blkdev_flush`
+- [*] `blkdev_close`
 
 ## `fsx492.c`
 
@@ -28,10 +28,10 @@ They are critical for anything to work correctly.
 
 These are important helper functions.
 
-- [ ] `search_block` (optional if not needed)
-- [ ] `find_entry`
-- [ ] `_link`
-- [ ] `_unlink`
+- [*] `search_block` (optional if not needed)
+- [*] `find_entry`
+- [*] `_link`
+- [*] `_unlink`
 
 ### FUSE Callbacks
 
@@ -40,16 +40,16 @@ These are the FUSE callbacks that need to be implemented.
 
 They are listed in suggested order of implementation.
 
-- [ ] `fsx492_getattr` (high priority)
-- [ ] `fsx492_opendir` (high priority)
-- [ ] `fsx492_releasedir` (high priority)
-- [ ] `fsx492_mkdir`
-- [ ] `fsx492_rmdir`
-- [ ] `fsx492_open`
-- [ ] `fsx492_release`
-- [ ] `fsx492_write` (difficult)
-- [ ] `fsx492_link`
-- [ ] `fsx492_chmod`
+- [*] `fsx492_getattr` (high priority)
+- [*] `fsx492_opendir` (high priority)
+- [*] `fsx492_releasedir` (high priority)
+- [*] `fsx492_mkdir`
+- [*] `fsx492_rmdir`
+- [*] `fsx492_open`
+- [*] `fsx492_release`
+- [*] `fsx492_write` (difficult)
+- [*] `fsx492_link`
+- [*] `fsx492_chmod`
 
 For additional features:
 (Note that these functions do not exist in the template, you must add them.)
